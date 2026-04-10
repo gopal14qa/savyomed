@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Failed suite [Default suite]" guice-stage="DEVELOPMENT">
+  <test thread-count="5" name="Default test(failed)">
+    <classes>
+      <class name="savyotestscrit.Savyouaudit2">
+        <methods>
+          <include name="beforeClass"/>
+          <include name="tc01_openBrowserAndEnterUrl"/>
+          <include name="tc05_clickSignIn"/>
+          <include name="tc02_navigateToSignIn"/>
+          <include name="afterClass"/>
+          <include name="tc09_addToCart"/>
+          <include name="tc03_enterUsername"/>
+          <include name="tc12_selectShippingAndFinalCheckout"/>
+          <include name="tc08_openProductPage"/>
+          <include name="tc10_openCartPage"/>
+          <include name="tc07_openCategory"/>
+          <include name="tc13_returnToHomePage"/>
+          <include name="tc11_goToCheckout"/>
+          <include name="tc04_enterPassword"/>
+          <include name="tc06_hoverCategoryMenu"/>
+        </methods>
+      </class> <!-- savyotestscrit.Savyouaudit2 -->
+    </classes>
+  </test> <!-- Default test(failed) -->
+</suite> <!-- Failed suite [Default suite] -->
