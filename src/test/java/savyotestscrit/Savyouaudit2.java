@@ -9,6 +9,8 @@ import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.Keys;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
@@ -21,14 +23,20 @@ import org.testng.ITestContext;
 import org.testng.ITestListener;
 import org.testng.ITestResult;
 import org.testng.annotations.AfterClass;
+import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Listeners;
 import org.testng.annotations.Test;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -43,8 +51,14 @@ public class Savyouaudit2 {
     private static final String USERNAME = "EXINENT45@YOPMAIL.COM";
     private static final String PASSWORD = "TEST@1234";
 
+    /** Daily folders: D:\scrrenshots for automation\savyomed\yyyy-MM-dd\ */
+    private static final Path SCREENSHOT_BASE_DIR =
+            Paths.get("D:", "scrrenshots for automation", "savyomed");
+
     private WebDriver driver;
     private WebDriverWait wait;
+    /** Shorter waits for menu / category (faster than fixed sleeps) */
+    private WebDriverWait waitQuick;
     private Actions actions;
     private JavascriptExecutor js;
 
@@ -56,9 +70,47 @@ public class Savyouaudit2 {
         options.addArguments("--disable-notifications");
         driver = new ChromeDriver(options);
         wait = new WebDriverWait(driver, Duration.ofSeconds(25));
+        waitQuick = new WebDriverWait(driver, Duration.ofSeconds(12));
         actions = new Actions(driver);
         js = (JavascriptExecutor) driver;
         System.out.println("[SETUP] WebDriver started (Chrome).");
+    }
+
+    @AfterMethod(alwaysRun = true)
+    public void captureScreenshotAfterEachTest(ITestResult result) {
+        if (driver == null) {
+            return;
+        }
+        try {
+            String dayFolder = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            Path dayDir = SCREENSHOT_BASE_DIR.resolve(dayFolder);
+            Files.createDirectories(dayDir);
+
+            String time = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HHmmss"));
+            String status;
+            switch (result.getStatus()) {
+                case ITestResult.SUCCESS:
+                    status = "PASS";
+                    break;
+                case ITestResult.FAILURE:
+                    status = "FAIL";
+                    break;
+                case ITestResult.SKIP:
+                    status = "SKIP";
+                    break;
+                default:
+                    status = "OTHER";
+                    break;
+            }
+            String fileName = result.getMethod().getMethodName() + "_" + status + "_" + time + ".png";
+            Path dest = dayDir.resolve(fileName);
+
+            File shot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+            Files.copy(shot.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
+            System.out.println("[SCREENSHOT] " + dest.toAbsolutePath());
+        } catch (Exception e) {
+            System.err.println("[SCREENSHOT] Could not save: " + e.getMessage());
+        }
     }
 
     @AfterClass(alwaysRun = true)
@@ -76,6 +128,12 @@ public class Savyouaudit2 {
     private void scrollIntoView(WebElement el) {
         js.executeScript("arguments[0].scrollIntoView({block:'center', inline:'nearest'});", el);
         pause(400);
+    }
+
+    /** Lighter scroll settle for nav / category (faster). */
+    private void scrollIntoViewQuick(WebElement el) {
+        js.executeScript("arguments[0].scrollIntoView({block:'center', inline:'nearest'});", el);
+        pause(120);
     }
 
     private void pause(long ms) {
@@ -273,7 +331,16 @@ public class Savyouaudit2 {
         if (!ok) {
             driver.switchTo().activeElement().sendKeys(Keys.ENTER);
         }
-        pause(2500);
+        try {
+            waitQuick.until(ExpectedConditions.or(
+                    ExpectedConditions.presenceOfElementLocated(
+                            By.cssSelector(".customer-welcome, .customer-name, .greet.welcome, a[href*='customer/account/logout']")),
+                    ExpectedConditions.invisibilityOfElementLocated(By.id("send2")),
+                    ExpectedConditions.urlContains("customer/account")));
+        } catch (Exception ignored) {
+            pause(600);
+        }
+        pause(350);
         js.executeScript("window.scrollTo(0, 0);");
         System.out.println("[PASS] tc05_clickSignIn — login submitted");
     }
@@ -298,9 +365,17 @@ public class Savyouaudit2 {
             }
         }
         Assert.assertNotNull(menuEl, "Shop Products menu should be visible");
-        scrollIntoView(menuEl);
-        actions.moveToElement(menuEl).pause(Duration.ofMillis(600)).perform();
-        pause(800);
+        scrollIntoViewQuick(menuEl);
+        actions.moveToElement(menuEl).pause(Duration.ofMillis(80)).perform();
+        try {
+            waitQuick.until(d -> {
+                List<WebElement> sub = d.findElements(By.cssSelector(
+                        "li.level1 a, .level0.submenu .ui-menu-item a, .submenu li a"));
+                return sub.stream().anyMatch(WebElement::isDisplayed);
+            });
+        } catch (Exception ignored) {
+            pause(250);
+        }
         System.out.println("[PASS] tc06_hoverCategoryMenu — menu hovered");
     }
 
@@ -308,13 +383,14 @@ public class Savyouaudit2 {
     public void tc07_openCategory() {
         logStep("tc07_openCategory — open first visible subcategory");
         try {
-            wait.until(ExpectedConditions.or(
+            waitQuick.until(ExpectedConditions.or(
                     ExpectedConditions.visibilityOfElementLocated(By.cssSelector("ul.submenu, .submenu, nav .level0.submenu")),
                     ExpectedConditions.visibilityOfElementLocated(By.xpath("//div[contains(@class,'submenu')]//a"))
             ));
         } catch (Exception ignored) {
-            pause(500);
+            pause(200);
         }
+        final String urlBefore = driver.getCurrentUrl();
         By[] subLinks = new By[]{
                 By.cssSelector("li.level1 > a"),
                 By.cssSelector(".level0.submenu .ui-menu-item a"),
@@ -335,9 +411,9 @@ public class Savyouaudit2 {
                     if (!a.isDisplayed()) {
                         continue;
                     }
-                    scrollIntoView(a);
+                    scrollIntoViewQuick(a);
                     try {
-                        wait.until(ExpectedConditions.elementToBeClickable(a));
+                        waitQuick.until(ExpectedConditions.elementToBeClickable(a));
                         a.click();
                     } catch (Exception e) {
                         js.executeScript("arguments[0].click();", a);
@@ -352,11 +428,26 @@ public class Savyouaudit2 {
             }
         }
         Assert.assertTrue(clicked, "A category link should open");
-        pause(2500);
+        try {
+            waitQuick.until(d -> {
+                if (!urlBefore.equals(d.getCurrentUrl())) {
+                    return true;
+                }
+                JavascriptExecutor j = (JavascriptExecutor) d;
+                if (!"complete".equals(String.valueOf(j.executeScript("return document.readyState")))) {
+                    return false;
+                }
+                return !d.findElements(By.cssSelector(
+                        ".category-view, .page-title-wrapper .page-title, .product-items .product-item, .products-grid .product-item"))
+                        .isEmpty();
+            });
+        } catch (Exception ignored) {
+            pause(400);
+        }
         wait.until(d -> "complete".equals(
                 String.valueOf(((JavascriptExecutor) d).executeScript("return document.readyState"))));
         js.executeScript("window.scrollTo(0, 300);");
-        pause(500);
+        pause(200);
         System.out.println("[PASS] tc07_openCategory — category page opened: " + driver.getCurrentUrl());
     }
 
